@@ -1,4 +1,4 @@
-#setLanguageLevel 3;
+git#setLanguageLevel 3;
 
 EventData ed = getEventData();
 String chatSessionId  = ed.getInputValue("chatMessage.sessionId"); //The ID for the specific chat session.
