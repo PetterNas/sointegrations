@@ -1,13 +1,5 @@
 #setLanguageLevel 3;
 
-/*
-Full documentation available here: 
-
-*/
-
-
-
-
 EventData ed = getEventData();
 String chatSessionId  = ed.getInputValue("chatMessage.sessionId"); //The ID for the specific chat session.
 String customerText   = ed.getInputValue("chatMessage.message");   //The message sent by the user.
