@@ -14,9 +14,7 @@ String project_id     = "norsktestbot-fihwna";
 /*
 On row 67 theere is a SearchEngine that will be used temporarily.
 This is used to workaround TFS: 72750
-
 Fix row 131, 138,
-
 */
 
 // Specify the chat topic ID's where the bot should be enabled.
