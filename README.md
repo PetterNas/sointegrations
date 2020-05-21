@@ -1,6 +1,6 @@
 ## Easy to implement CRMScripts to automate your solution.
 
-### Integrations include:
+# Integrations include:
 
 * Dialogflow Chatbot integration
 * PicToFaq
