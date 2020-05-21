@@ -1,7 +1,14 @@
 # sointegrations
 SuperOffice integrations - CRMScripts
 
-# This is a test update.
+## Here you will easy to implement CRMScripts that will help you to automate your solution.
 
-This seems to be working just fine.
-Next - I will try to create a folder.
+# Integrations include:
+* Dialogflow Chatbot integration
+* PicToFaq
+* Cisco Teams notifier
+* Cisco teams Queue assist
+* Teamviewer integration
+* Webscraper that grabs FAQ links from customer center.
+
+Each integration comes with a technical documentation.
