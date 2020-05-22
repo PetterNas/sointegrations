@@ -11,4 +11,4 @@
 
 
 
-Each integration comes with a technical documentation.
+Each integration comes with a technical documentation attached as a .PDF document.
