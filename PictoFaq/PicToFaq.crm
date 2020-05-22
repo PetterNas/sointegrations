@@ -1,0 +1,188 @@
+#setLanguageLevel 3;
+
+/////////////// Variables needed. //////////////////////////
+String apiURL = 'https://vision.googleapis.com/v1/images:annotate';                                   // Endpoint for API.
+String baseURL = '';                                                                                  // Base URL for CS attachments.
+String checkURL = 'https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=';                     // For verifying the access token.
+String ticketId = getCgiVariable("entryId");                                                          // Loading current ticket.
+String null;                                                                                          // To use as a criteria for null values in SearchEngine.
+String attachmentId = '';                                                                             // Will be filled by getURL().
+String success;
+
+// Getting the current access_token from database.
+SearchEngine accessToken;
+accessToken.addCriteria("UserPreference.prefkey", "Equals", "Vision_access_token");
+accessToken.addField("UserPreference.prefvalue");
+accessToken.execute();
+String access_token = accessToken.getField("UserPreference.prefvalue"); // Taking the current access_token from DB.
+
+// Making sure that the token is up to date. 
+String validate_token(String access_token){
+
+  String client_id     = "";
+  String client_secret = "";
+  String refresh_token = "";
+
+  HTTP checkToken;
+  String checkToken_return = String(checkToken.post(checkURL + access_token));
+  XMLNode x3               = parseJSON(checkToken_return);
+  String invalid_token     = x3.getValueFromPath("error");
+
+  if(invalid_token != "invalid_token") //If it is not invalid, return the current token.
+    {
+    return access_token;      
+    }
+  else //If it is invalid, refresh the token, save the new value, and return the new token.
+    { 
+    JSONBuilder refreshToken;
+    refreshToken.pushObject("");
+    refreshToken.addString("client_id", client_id);
+    refreshToken.addString("client_secret", client_secret);
+    refreshToken.addString("grant_type", "refresh_token");
+    refreshToken.addString("refresh_token", refresh_token);
+    refreshToken.popLevel();
+
+    HTTP tokenPost;
+    tokenPost.addHeader("content-type", "form-data");
+    tokenPost.setOption("parameters" , "?" + refreshToken.getString());
+    String tokenPost_return = String(tokenPost.post("https://www.googleapis.com/oauth2/v4/token"));
+
+    XMLNode x3     = parseJSON(tokenPost_return);
+    access_token   = x3.getValueFromPath("access_token");
+
+    SearchEngine NewToken;
+    NewToken.addCriteria("UserPreference.prefkey", "Equals", "Vision_access_token");
+    NewToken.addData("UserPreference.prefvalue", access_token);
+    NewToken.update(); //Updating the access_token value stored in database.
+
+    return access_token; // Returning the new updated token.
+    }
+}
+
+// Getting the base64 encoding for the attachment 
+String getURL(){ 
+
+  SearchEngine msgId;
+  msgId.addField("ej_message.id");
+  msgId.addCriteria("ej_message.ticket_id", "Equals",ticketId);
+  msgId.addCriteria("ej_message.created_by", "Equals", "1");            // Only messages not created by an agent.
+  msgId.addCriteria("ej_message.slevel", "Equals", "2");                // Only external messages.
+  //msgId.addCriteria("ej_message.slegetTextDatavel", "Equals", "2");   // Only external messages.
+  msgId.addOrder("ej_message.id", False);                               // Take the highest ej_message.id based on the criterias.
+  msgId.setLimit(1);
+  msgId.execute();
+  String msg = msgId.getField("ej_message.id");                         // Saving the msg id.  
+  
+  SearchEngine ticketAttId;
+  ticketAttId.addField("ticket_attachment.attachment_id");                       // We only need to attachment_id.
+  ticketAttId.addCriteria("ticket_attachment.message_id", "Equals", msg);        // Searching ticket_attachment table using the msg ID from previous SearchEngine.
+ 
+  if(ticketAttId.countRows() != 0){                                              // If the attachment is in ticket_attachment table
+
+    ticketAttId.execute();
+    attachmentId = ticketAttId.getField("ticket_attachment.attachment_id");      // Getting the ticket_attachment id for the attachment in that message.   
+
+    Attachment a;
+    a.load(attachmentId.toInteger());
+    String encoded = a.getBase64(); //What we will send to the API.
+
+    return encoded; //Base64 encoding for picture in ticket_attahcment.
+    
+  }else
+  {                                                                 //If the attachment is not in ticket_attachment table, search the attachment table.    
+    SearchEngine getHtmlBody;
+    getHtmlBody.addField("ej_message.html_body");                   // The ID of the attachment will be visible in the hyperlink available in the HTML body.
+    getHtmlBody.addCriteria("ej_message.id", "Equals", msg); 
+    getHtmlBody.execute();
+
+    String bodyHtml = getHtmlBody.getField("ej_message.html_body");
+    attachmentId = bodyHtml.after("getAttachment/").before("-");    //Take only the ID part of the URL.
+
+    Attachment getb64;
+    getb64.load(attachmentId.toInteger());    
+    String encoded1 = getb64.getBase64(); //What we will send to the API.
+    
+    return encoded1; //Base64 encoding for picture in attachment table.    
+  }    
+}
+
+//Sending Base64 encoded pic for text extraction. 
+String getTextData(){
+  
+  JSONBuilder jb;
+  jb.pushObject("");
+  jb.pushArray("requests");
+  jb.pushObject("");
+  jb.pushObject("image");
+  jb.addString("content", getURL()); //Getting the base64 encoding, depending on where the picture is stored.
+  jb.popLevel();
+  jb.pushArray("features");
+  jb.pushObject("");
+  jb.addString("type","TEXT_DETECTION");
+  jb.finalize(); 
+
+  
+  HTTP h;
+  h.addHeader("content-type", "application/json");
+  h.addHeader("Authorization", "Bearer " + validate_token(access_token));
+  h.setOption("parameters" , "?" + jb.getString());
+
+  String json = String(h.post(apiURL));
+  XMLNode x4  = parseJSON(json);
+  String thetext = x4.getValueFromPath("0.0.1.text"); //Grabbing the full returned text..
+  thetext.utf8Decode();
+  
+  //Using the returned text to search for a FAQ in the custom column.
+  Map m;
+  SearchEngine findFAQ;
+  findFAQ.addField("kb_entry.x_error_message"); //The custom column.
+  findFAQ.addField("kb_entry.title"); //The title.
+  findFAQ.addField("kb_entry.id");
+  findFAQ.addCriteria("kb_entry.x_error_message", "OperatorNotLike", null); // Not searching FAQ's where this field is not filled.
+  
+  // Looping through the error messages in KB_ENTRY table.
+  for (findFAQ.execute(); !findFAQ.eof(); findFAQ.next()){ 
+
+    //Splitting the words for the error messages, and saving as an array.  
+    String[] example = findFAQ.getField("kb_entry.x_error_message").split(";");
+
+     //Looping through the created array above, to insert all values into a map. 
+    for (Integer i = 0; i < example.length(); i++) 
+      {
+      m.insert(example[i], findFAQ.getField("kb_entry.id"));
+      }
+    
+  }  
+
+  //Looping through the map to find a match for the returned text.
+  for (m.first(); !m.eof(); m.next())
+  {
+    if(thetext.findCase(m.getKey()) != -1) // If it finds a hit, return string success.
+    {      
+      Knowledge faq;      
+      success = "Based on the error message, we found this FAQ: "+ "</br> " + "<a href="+ faq.buildExternalEntryURLWithParser(m.getVal().toInteger(), getParser()) + ">" + "Faq with ID " + m.getVal() + "</a>";      
+      break;
+    } 
+	}
+  
+  if(success.getLength() >= 1){
+    return success;
+  }else{
+    String fail = "Didn't work.";
+    return fail;
+  }  
+}
+
+// Populate ticket and trigger the rest of the functions.
+Void writeMsg(){
+  Message m;
+  m.setValue("ticketId", ticketId);
+  m.setValue("slevel", "1");
+  m.setValue("bodyHtml", getTextData());
+  m.save();  
+}
+
+////////////////////////////////////
+// Runs everything written above. //
+////////////////////////////////////
+        writeMsg();  
