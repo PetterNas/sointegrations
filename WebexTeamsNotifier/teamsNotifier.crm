@@ -1,0 +1,73 @@
+#setLanguageLevel 3;
+
+String bot_access = '';
+String baseUrl = '';
+String room_id;
+
+//Sends the actual Teams message. Gets the variables from ticketFinder().
+Void sendMsg(String ticketId, String room_id, String ticketTitle){
+  
+  JSONBuilder sendMsg;
+  sendMsg.pushObject("");  
+  sendMsg.addString("roomId", room_id);   
+  sendMsg.addString("markdown", "###New unassigned ticket from A customer.\n SOSID: " + "**"+ticketId + "**" + "</br> click here to see the request: ["+ticketTitle+"]("+baseUrl+ticketId+")");  
+  sendMsg.popLevel();
+
+  HTTP sendReplypost;
+  sendReplypost.addHeader("content-type", "application/json");
+  sendReplypost.addHeader("Authorization", "Bearer "+ bot_access);
+  sendReplypost.setOption("parameters" , "?" + sendMsg.getString());
+  sendReplypost.post("https://api.ciscospark.com/v1/messages");  
+}
+
+Void ticketFinder(){
+  
+  SearchEngine getTickets;
+  getTickets.addFields("ticket","id,category.fullname,title");
+  getTickets.addCriteria("ticket.x_real_customer.contact_id.category_idx.Category_id", "Equals", "3", "operatorAnd", 0);
+  getTickets.addCriteria("ticket.category", "In", "83,100286,98,19,100233,100324,100311,100312,100312,4,100234,100343,100301,100302");
+  getTickets.addCriteria("ticket.status", "Equals", "1", "operatorAnd", 0);                                      
+  getTickets.addCriteria("ticket.owned_by", "Equals", "1");                                                      
+  
+  for(getTickets.select(); !getTickets.eof(); getTickets.next()){
+    
+    if(getTickets.getField("ticket.category.fullname").beginsWith("BLX"))
+    {       
+      room_id = 'XXXXXXXXXXXXXXXX';
+      sendMsg(getTickets.getField("ticket.id"), room_id, getTickets.getField("ticket.title"));
+      
+    }else if(getTickets.getField("ticket.category.fullname").beginsWith("CH"))
+    {
+      room_id = 'XXXXXXXXXXXXXXXX';      
+      sendMsg(getTickets.getField("ticket.id"), room_id,getTickets.getField("ticket.title"));
+      
+    }else if(getTickets.getField("ticket.category.fullname").beginsWith("DE"))
+    {
+      room_id = 'XXXXXXXXXXXXXXXXX';      
+      sendMsg(getTickets.getField("ticket.id"), room_id,getTickets.getField("ticket.title"));
+      
+    }else if(getTickets.getField("ticket.category.fullname").beginsWith("DK"))
+    {
+      room_id = 'XXXXXXXXXXXXXXXX';      
+      sendMsg(getTickets.getField("ticket.id"), room_id,getTickets.getField("ticket.title"));
+      
+    }else if(getTickets.getField("ticket.category.fullname").beginsWith("NO"))
+    {
+      room_id = 'XXXXXXXXXXXXXXXX';      
+      sendMsg(getTickets.getField("ticket.id"), room_id,getTickets.getField("ticket.title"));
+      
+    }else if(getTickets.getField("ticket.category.fullname").beginsWith("SE"))
+    {
+      room_id = 'XXXXXXXXXXXXXX';      
+      sendMsg(getTickets.getField("ticket.id"), room_id,getTickets.getField("ticket.title"));
+      
+    }else if(getTickets.getField("ticket.category.fullname").beginsWith("UK"))
+    {
+      room_id = 'XXXXXXXXXXXXXXX';      
+      sendMsg(getTickets.getField("ticket.id"), room_id,getTickets.getField("ticket.title"));
+      
+    }   
+  }  
+}
+
+ticketFinder();
