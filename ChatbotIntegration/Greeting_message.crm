@@ -1,0 +1,19 @@
+#setLanguageLevel 3;
+
+EventData ed = getEventData();
+String chatSessionId = ed.getInputValue("chatSession.id");
+String customerFirstName = ed.getInputValue("chatSession.customerAlias").before(" ");
+String topicId = ed.getInputValue("chatSession.topicId");
+
+String greetingMsg = "Hi "+customerFirstName+". \n ";
+String greetingMsgNoName = "";
+
+if (topicId == "3" ){
+
+  if(customerFirstName == "" ){
+    addChatMessage(chatSessionId.toInteger(),greetingMsgNoName,1,"Digital assistent",0,"");
+  }else{
+    addChatMessage(chatSessionId.toInteger(),greetingMsg,1,"Digital assistent",0,"");
+  }
+
+}
