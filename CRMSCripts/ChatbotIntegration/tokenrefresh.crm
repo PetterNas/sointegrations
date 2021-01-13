@@ -1,0 +1,68 @@
+#setLanguageLevel 3;
+
+#include "chatbotConfig";
+
+//Getting the BinaryObject_id for the access token.
+SearchEngine binaryObjAccessId;
+binaryObjAccessId.addField("BinaryObject.BinaryObject_id");
+binaryObjAccessId.addCriteria("BinaryObject.conceptualType", "Equals", "souab.chatbot.access_token");
+binaryObjAccessId.execute();
+Integer accessTokenId = binaryObjAccessId.getField("BinaryObject.BinaryObject_id").toInteger();
+
+//Getting the BinaryObject_id for the refresh token.
+SearchEngine binaryObjRefreshId;
+binaryObjRefreshId.addField("BinaryObject.BinaryObject_id");
+binaryObjRefreshId.addCriteria("BinaryObject.conceptualType", "Equals", "souab.chatbot.refresh_token");
+binaryObjRefreshId.execute();
+Integer refreshTokenId = binaryObjRefreshId.getField("BinaryObject.BinaryObject_id").toInteger();
+
+NSStream tokenStream;
+NSBLOBAgent bAgent;
+
+tokenStream = bAgent.GetBlobStream(accessTokenId);
+Byte[] accessToken = simpleTwoWay(tokenStream.GetStream());
+String access_token = String(accessToken);
+
+tokenStream = bAgent.GetBlobStream(refreshTokenId);
+Byte[] refreshToken = simpleTwoWay(tokenStream.GetStream());
+refresh_token = String(refreshToken);
+
+String validate_token(String access_token)
+{
+  HTTP checkToken;
+  String checkToken_return = String(checkToken.post(checkTokenUrl + access_token));
+  XMLNode x3               = parseJSON(checkToken_return);
+  String invalid_token     = x3.getValueFromPath("error");
+
+  if(invalid_token != "invalid_token")
+	{
+		return access_token;
+	}
+	else
+	{
+    JSONBuilder refreshToken;
+    refreshToken.pushObject("");
+    refreshToken.addString("client_id", client_id);
+    refreshToken.addString("client_secret", client_secret);
+    refreshToken.addString("grant_type", "refresh_token");
+    refreshToken.addString("refresh_token", refresh_token);
+    refreshToken.popLevel();
+
+    HTTP tokenPost;
+    tokenPost.addHeader("content-type", "form-data");
+    tokenPost.setOption("parameters" , "?" + refreshToken.getString());
+    String tokenPost_return = String(tokenPost.post("https://www.googleapis.com/oauth2/v4/token"));
+
+    XMLNode x3     = parseJSON(tokenPost_return);
+    access_token   = x3.getValueFromPath("access_token");
+
+    NSStream updateTokensStream;
+    NSBLOBAgent updateBlob;
+
+    Byte[] newAccessToken = simpleTwoWay(access_token.toByteArray());
+    updateTokensStream.SetStream(newAccessToken);
+    updateBlob.SetBlobStream(accessTokenId, updateTokensStream);
+
+    return access_token; // Returning the new updated token.
+  }
+}
