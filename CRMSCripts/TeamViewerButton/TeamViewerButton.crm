@@ -1,5 +1,9 @@
-/*            Made by: Petter N�slund, 
-                      SuperOffice UAB 24/8 2019.             
+#setLanguageLevel 3;
+
+/*            Made by: Petter Naeslund, 
+                      SuperOffice UAB 24/8 2019.  
+                      
+                      Latest updated 1/8 2021.
 
              The "TeamViewer Remote" button from Action menu.
              Variables are obtained from TeamViewer Management Console. access_token expires after 24 hours, needs to be refreshed with a refresh token.
@@ -23,8 +27,11 @@
              
              Before every call there is a post to ping endpoint in order to verify the access token. 
              If token_valid == false, a new access_token will be obtained by using the refresh token. This will also update refresh token with the new token. 
+                    
+             Tokens are stored encrypted in BinaryObject table.
 */
-#setLanguageLevel 3;
+
+
 User activeAssoc;
 activeAssoc = getActiveUser();
 
@@ -33,238 +40,195 @@ String url = "https://webapi.teamviewer.com/api/v1/";  //URL for API calls.
 String access_token;
 String refresh_token;
 
-//Getting the access token from DB.
-SearchEngine accessToken;
-accessToken.addCriteria("UserPreference.prefkey", "Equals", "TeamViewer_access_token"); 
-accessToken.addField   ("UserPreference.prefvalue");
-String access_token_value = accessToken.executeJSON();
-XMLNode x0 = parseJSON(access_token_value);  
-access_token = x0.getValueFromPath("0.0"); //Taking the current value from DB.
+//Getting the access and refresh tokens from DB.
+SearchEngine binaryObjAccessId;
+binaryObjAccessId.addField("BinaryObject.BinaryObject_id");
+binaryObjAccessId.addCriteria("BinaryObject.conceptualType", "Equals", "souab.tv.access_token");
+binaryObjAccessId.execute();
+Integer accessTokenId = binaryObjAccessId.getField("BinaryObject.BinaryObject_id").toInteger();
 
-//Getting the refresh token from DB.
-SearchEngine refreshToken;
-refreshToken.addCriteria("UserPreference.prefkey", "Equals", "TeamViewer_refresh_token"); 
-refreshToken.addField   ("UserPreference.prefvalue");
-String refresh_token_value = refreshToken.executeJSON();
-XMLNode x1         = parseJSON(refresh_token_value);  
-refresh_token  = x1.getValueFromPath("0.0");  //Taking the current value from DB.
+SearchEngine binaryObjRefreshId;
+binaryObjRefreshId.addField("BinaryObject.BinaryObject_id");
+binaryObjRefreshId.addCriteria("BinaryObject.conceptualType", "Equals", "souab.tv.refresh_token");
+binaryObjRefreshId.execute();
+Integer refreshTokenId = binaryObjRefreshId.getField("BinaryObject.BinaryObject_id").toInteger();
+
+NSStream tokenStream;
+NSBLOBAgent bAgent;
+
+tokenStream = bAgent.GetBlobStream(accessTokenId);
+Byte[] accessToken = simpleTwoWay(tokenStream.GetStream());
+access_token = String(accessToken);
+
+tokenStream = bAgent.GetBlobStream(refreshTokenId);
+Byte[] refreshToken = simpleTwoWay(tokenStream.GetStream());
+refresh_token = String(refreshToken);
 
 //Variables taken from SO.
-String ticketId = getCgiVariable("entryId"); //Loading current ticket.
+String ticketId = getCgiVariable("entryId"); 
 Ticket ticket;
 ticket.load(ticketId.toInteger());
-String description = ticket.getValue("id");     //Will be used as the description field in TeamViewer.
+String description = ticket.getValue("id");  //Will be used as the description field in TeamViewer.
 Customer cust; 
 cust.load(ticket.getValue("custId").toInteger());
 String end_cust = cust.getValue("firstname");
-//String end_cust    = ticket.getValue("author"); // Will be used for the name in TeamViewer.
 
-String ticket_cat = ticket.getValue("category");//Will be used as argument for getLanguage()
+String ticket_cat = ticket.getValue("category"); //Will be used as argument for getLanguage()
 String replyLang; //Setting right language for reply template. Value set from getLanguage()
 String fromAddr; //The sender address for the email. Value set from getLanguage()
 
 //To get the right group in TeamViewer, the right language for reply template, and correct sender address.
-String getLanguage(String ticket_cat){  
+String getLanguage(String ticket_cat)
+{  
   String group_Id;
 
 // First ID will be User, second Technical, third FreeTrial for each country.  
-  if(ticket_cat == "100233" || ticket_cat == "100324" || ticket_cat == "100247"){
-    String group_Id = "g104952234"; //German 
-    fromAddr = "support@superoffice.de";
-    replyLang = "11";
+  if(ticket_cat == "X" || ticket_cat == "X" || ticket_cat == "X")
+  {
+    String group_Id = "gX"; //Group id in TeamViewer. 
+    fromAddr = "fromaddr@email.com";
+    replyLang = "X";
     return group_Id;
   }  
-  else if (ticket_cat == "100311" || ticket_cat == "100312" || ticket_cat == "100248"){
-    String group_Id = "g104951748"; //Danish
-    fromAddr = "support@superoffice.dk";
-    replyLang = "8";
-    return group_Id;
-  }
-  else if (ticket_cat == "83" || ticket_cat == "100286" || ticket_cat == "100245"){
-    String group_Id = "g104951939"; //Netherlands
-    fromAddr = "support@superoffice.nl";
-    replyLang = "9";
-    return group_Id;
-  }
-  else if (ticket_cat == "100232" || ticket_cat == "4" || ticket_cat == "100249"){
-    String group_Id = "g87217858"; //Norway
-    fromAddr = "support@superoffice.no";
-    replyLang = "7";
-    return group_Id;
-  }
-  else if (ticket_cat == "100234" || ticket_cat == "100343" || ticket_cat == "100250"){
-    String group_Id = "g104950619"; //Sweden
-    fromAddr = "support@superoffice.se";
-    replyLang = "12";
-    return group_Id;
-  }
-  else if (ticket_cat == "100301" || ticket_cat == "100302" || ticket_cat == "100251"){
-    String group_Id = "g104952075"; //UK
-    fromAddr = "support@superoffice.com";
-    replyLang = "10";
-    return group_Id;
-  }
-  else if (ticket_cat == "98" || ticket_cat == "19" || ticket_cat == "100246"){
-    String group_Id = "g124215864"; //CH
-    fromAddr = "support@superoffice.ch";
-    replyLang = "13";
-    return group_Id;
-  }
-  else{
-    String group_Id = "g104952756"; //Critical group in TeamViewer.
-    replyLang = "10";    
-    fromAddr = "support@superoffice.com";
-    return group_Id;
-  }
+  
 }
 
 //Getting a valid auth_token.
-String getValidToken(String access_token){
-String clientId     = "" ; // From TeamViewer Management Console.
-String clientSecret = "";         // From TeamViewer Management Console  
- 
-//Sending ping request to API. if the token is valid, return access_token. Else - refresh and return token.
-HTTP ping;
-ping.addHeader("content-type",  "application/json");
-ping.addHeader("Authorization", "Bearer " + access_token); //Sending current access token.
-String ping_return = String(ping.post(url + 'ping'));
-XMLNode x2   = parseJSON(ping_return);
-String token_valid = x2.getValueFromPath("token_valid"); //Returns a token_valid that is either true or false.
-if (token_valid == "true"){ //If True, return the current token.
-  return access_token;
-}
-else{ //If false, refresh the token, and save the new values of access token and refresh token, then return the new access token.
-  //JSON for refreshing tokens.
-  JSONBuilder refreshToken;
-  refreshToken.pushObject("");
-  refreshToken.addString("grant_type", "refresh_token");
-  refreshToken.addString("refresh_token", refresh_token); //Using the value stored in database.
-  refreshToken.addString("client_id", clientId);        //ClientId From TW management console.
-  refreshToken.addString("client_secret", clientSecret);//ClientSecret from TW management console.
-  refreshToken.popLevel();
-   
-  //Sending post request.
-  HTTP refreshPost;
-  refreshPost.addHeader("content-type", "application/json");
-  refreshPost.setOption("parameters" , "?" + refreshToken.getString());
-  String refreshPost_return = String(refreshPost.post(url + 'oauth2/token'));
-  XMLNode x3   = parseJSON(refreshPost_return);
-  access_token  = x3.getValueFromPath("access_token");  //New access_token returned from API.
-  refresh_token = x3.getValueFromPath("refresh_token"); //New refresh_token returned from API.
+String getValidToken(String access_token)
+{
+  String clientId     = "X" ; // From TeamViewer Management Console.
+  String clientSecret = "X";  // From TeamViewer Management Console  
+
+  //Sending ping request to TeamViewer API. if the token is valid, return access_token. Else - refresh and return token.
+  HTTP ping;
+  ping.addHeader("content-type",  "application/json");
+  ping.addHeader("Authorization", "Bearer " + access_token); //Sending current access token.
+  String ping_return = String(ping.post(url + 'ping'));
+  XMLNode x2   = parseJSON(ping_return);
+  String token_valid = x2.getValueFromPath("token_valid"); //Returns a token_valid that is either true or false.
   
-  //Updating current values.
-  SearchEngine seNewAccess;
-  seNewAccess.addCriteria("UserPreference.prefkey", "Equals", "TeamViewer_access_token");
-  seNewAccess.addData("UserPreference.prefvalue", access_token); 
-  seNewAccess.update(); //Updating the access_token value stored in database.
-  
-  SearchEngine seNewRefresh;
-  seNewRefresh.addCriteria("UserPreference.prefkey", "Equals", "TeamViewer_refresh_token");
-  seNewRefresh.addData("UserPreference.prefvalue", refresh_token); 
-  seNewRefresh.update();  //Updating the refresh_token value stored in database.
-  
-  return access_token; //Returning the updated value of the authentication token.
-}  
+  if (token_valid == "true")
+  { 
+    return access_token;
+  }
+  else
+  { 
+    //JSON for refreshing tokens.
+    JSONBuilder refreshToken;
+    refreshToken.pushObject("");
+    refreshToken.addString("grant_type", "refresh_token");
+    refreshToken.addString("refresh_token", refresh_token); //Using the value stored in database.
+    refreshToken.addString("client_id", clientId);        //ClientId From TW management console.
+    refreshToken.addString("client_secret", clientSecret);//ClientSecret from TW management console.
+    refreshToken.popLevel();
+
+    //Sending post request.
+    HTTP refreshPost;
+    refreshPost.addHeader("content-type", "application/json");
+    refreshPost.setOption("parameters" , "?" + refreshToken.getString());
+    String refreshPost_return = String(refreshPost.post(url + 'oauth2/token'));
+    XMLNode x3   = parseJSON(refreshPost_return);
+    access_token  = x3.getValueFromPath("access_token");  //New access_token returned from API.
+    refresh_token = x3.getValueFromPath("refresh_token"); //New refresh_token returned from API.
+
+    //Updating current values.
+    Byte[] newAccessToken = simpleTwoWay(access_token.toByteArray());
+    Byte[] newRefreshToken = simpleTwoWay(refresh_token.toByteArray());
+    NSStream updateTokensStream;
+    NSBLOBAgent updateBlob;
+
+    updateTokensStream.SetStream(newAccessToken);
+    updateBlob.SetBlobStream(accessTokenId, updateTokensStream);
+    
+    updateTokensStream.SetStream(newRefreshToken);
+    updateBlob.SetBlobStream(refreshTokenId, updateTokensStream);
+    
+    return access_token; //Returning the updated value of the authentication token.
+  }  
 }
 
 //Getting the URL from TeamViewer.
-String getRemoteURL(){
-  
-String activeEmail  = activeAssoc.getValue("email"); //Will be used to get TeamViewer user_id.
-String agentName = activeAssoc.getValue("firstname"); //Will be displayed in the waiting message for TeamViewer. 
-  
-//Gets the TeamViewer user_id of the agent.
-HTTP assign_userid;
-assign_userid.addHeader("content-type", "application/json");
-assign_userid.addHeader("Authorization", "Bearer " + getValidToken(access_token)); //Getting a valid access_token from getValidToken() function.
-assign_userid.setValue("email", activeEmail); //Getting the TeamViewer ID from the current users email.
-String assigned_user_id = String(assign_userid.get(url + "users"));
-XMLNode x2   = parseJSON(assigned_user_id);
-String user_id = x2.getValueFromPath("users.0.id"); //user_id is the TW user ID.
+String getRemoteURL()
+{  
+  String activeEmail  = activeAssoc.getValue("email"); //Will be used to get TeamViewer user_id.
+  String agentName = activeAssoc.getValue("firstname"); //Will be displayed in the waiting message for TeamViewer. 
 
-//JSON for getting URL.
-JSONBuilder jb;
-jb.pushObject("");
-jb.addString("groupid", getLanguage(ticket_cat)); //Getting the right TW group id from getLanguage() function.
-jb.addString("description", description);  //Value from loading the ticket.
-jb.addString("waiting_message", "Thank you for joining the remote session. \n Please wait until " +agentName + " from SuperOffice support connects."); //Value from loading the ticket.
-jb.addString("assigned_userid", user_id);  
-jb.pushObject("end_customer");
-jb.addString("name", end_cust.utf8Encode());
-jb.popLevel();
-jb.popLevel();  
+  //Gets the TeamViewer user_id of the agent.
+  HTTP assign_userid;
+  assign_userid.addHeader("content-type", "application/json");
+  assign_userid.addHeader("Authorization", "Bearer " + getValidToken(access_token)); //Getting a valid access_token from getValidToken() function.
+  assign_userid.setValue("email", activeEmail); //Getting the TeamViewer ID from the current users email.
+  String assigned_user_id = String(assign_userid.get(url + "users"));
+  XMLNode x2   = parseJSON(assigned_user_id);
+  String user_id = x2.getValueFromPath("users.0.id"); //user_id is the TW user ID.
 
-//Sending the post to API
-HTTP h;
-h.addHeader("content-type", "application/json");
-h.addHeader("Authorization", "Bearer " + getValidToken(access_token)); //Using a valid token, checked by getValidToken() function.
-h.setOption("parameters" , "?" + jb.getString());
-String json = String(h.post(url + "sessions"));
+  //JSON for getting URL.
+  JSONBuilder jb;
+  jb.pushObject("");
+  jb.addString("groupid", getLanguage(ticket_cat)); //Getting the right TW group id from getLanguage() function.
+  jb.addString("description", description);  //Value from loading the ticket.
+  jb.addString("waiting_message", "Thank you for joining the remote session. \n Please wait until " +agentName + " from support connects."); //Value from loading the ticket.
+  jb.addString("assigned_userid", user_id);  
+  jb.pushObject("end_customer");
+  jb.addString("name", end_cust.utf8Encode());
+  jb.popLevel();
+  jb.popLevel();  
 
-XMLNode x3  = parseJSON(json);
-String end_customer_link = x3.getValueFromPath("end_customer_link"); //Saving the returned end_customer_link.
-  
-return end_customer_link; //Returning the value.
+  //Sending the post to API
+  HTTP h;
+  h.addHeader("content-type", "application/json");
+  h.addHeader("Authorization", "Bearer " + getValidToken(access_token)); //Using a valid token, checked by getValidToken() function.
+  h.setOption("parameters" , "?" + jb.getString());
+  String json = String(h.post(url + "sessions"));
+  XMLNode x3  = parseJSON(json);
+  String end_customer_link = x3.getValueFromPath("end_customer_link"); //Saving the returned end_customer_link.
+
+  return end_customer_link; //Returning the value.
 }
 
 //Updating the request.
-Void updateTicket(){  
-	  
+Void updateTicket()
+{ 	  
 	ReplyTemplate rt;
-	rt.load(102285); 
+	rt.load(X); 
 	Parser p;
 
 	String end_url = getRemoteURL(); //Getting the URL.
 		 
 	p.addVariable("TeamViewerURL", end_url); 
-	p.addVariable("nameTest", end_cust);
-	  
-	String bodyHtml = p.parseString(rt.getHtmlBody(replyLang.toInteger()));   
-	//String subject = p.parseString(rt.getSubject(replyLang.toInteger()));
+	p.addVariable("nameTest", end_cust);	  
+	String bodyHtml = p.parseString(rt.getHtmlBody(replyLang.toInteger()));
   String subject = "(SOS id:"+ticketId+")" +" "+ticket.getValue("ticket.title");
 
 	//If no URL is found, dont send any email, just save an internal message.
-	if (end_url == ""){
-	  Message message1;
-	  message1.setValue("ticketId", ticket.getValue("id"));
-	  message1.setValue("slevel", "1");
-	  message1.setValue("bodyHtml", "Ooops! Something went wrong.");
-	  message1.save();
+	if (end_url == "")
+	{
+    Message message1;
+    message1.setValue("ticketId", ticket.getValue("id"));
+    message1.setValue("slevel", "1");
+    message1.setValue("bodyHtml", "Ooops! Something went wrong.");
+    message1.save();
 	}    
-	 else{
-	  
-	  //cust.load(ticket.getValue("custId").toInteger());
-    /* 
-	  Email email;      
-	  email.setValue("from", fromAddr);
-	  email.setValue("to", cust.getValue("mainEmail"));
-	  email.setValue("subject", subject);
-	  email.setValue("bodyHtml", bodyHtml);
-	  email.send();   
-    */
-	 
-	  Message message;
-	  message.setValue("ticketId", ticket.getValue("id"));
-	  message.setValue("type", "2");
-	  message.setValue("slevel", "2");
-	  message.setValue("createdBy", activeAssoc.getValue("id"));
-      message.setValue("author", activeAssoc.getValue("username")); 
-	  message.setValue("bodyHtml", bodyHtml);
-      message.setValue("body", bodyHtml); 
-	  message.save();
+	else
+  {	 
+    Message message;
+    message.setValue("ticketId", ticket.getValue("id"));
+    message.setValue("type", "2");
+    message.setValue("slevel", "2");
+    message.setValue("createdBy", activeAssoc.getValue("id"));
+    message.setValue("author", activeAssoc.getValue("username")); 
+    message.setValue("bodyHtml", bodyHtml);
+    message.setValue("body", bodyHtml); 
+    message.save();
 
-     
     Vector to;
-   	Vector bcc;
-	Vector cc;
+    Vector bcc;
+    Vector cc;
 
-   	to.pushBack(cust.getValue("mainEmail"));
-   	message.addHeader("To", to.buildString(","));
-   	message.send(to, cc, bcc, subject);     
-		
+    to.pushBack(cust.getValue("mainEmail"));
+    message.addHeader("To", to.buildString(","));
+    message.send(to, cc, bcc, subject);		
 	}
 }
 
 updateTicket();
-setVariable("url", getProgramTicket() + "?action=listTicket&ticketId="+ ticket.getValue("id"));
-	  
