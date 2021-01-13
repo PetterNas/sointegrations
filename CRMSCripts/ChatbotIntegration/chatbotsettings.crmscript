@@ -1,0 +1,49 @@
+#setLanguageLevel 3;
+
+////////////////////////////////
+//Bot specific configuration. //
+////////////////////////////////
+
+//For which chat topic ID should the bot be active?
+String chatTopicId = "2";
+
+//What is the name of your bot?
+String botName = "Digital assistent";
+
+//What is the name of your handover intent?
+String handOverIntent = 'AgentHandover';
+
+//What should your bot say before handing over the session to an agent?
+String handOverMsg = '';
+
+//What is the name of your done conversation intent?
+String doneConversationIntent = 'DoneConver';
+
+//What should your bots good-bye message be?
+String goodBye = '';
+
+//How much delay should it be before the message is posted(In seconds)?
+Integer messageDelay = 1;
+
+//How much delay should it be before the second text response is sent(In seconds)?
+Integer secondMsgDelay = 2;
+
+///////////////////////////////
+//API Specific configuration //
+///////////////////////////////
+
+//Base URL for API.
+String url  = 'https://dialogflow.googleapis.com/v2/';
+
+//For validating token.
+String checkTokenUrl = 'https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=';
+
+//Project id in Dialogflow console
+String project_id  = "x";
+
+//What is your client ID?
+String client_id = 'x';
+
+//What is your client secret?
+String client_secret = 'x';
+
