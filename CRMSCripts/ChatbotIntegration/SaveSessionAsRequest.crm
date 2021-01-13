@@ -1,62 +1,71 @@
 #setLanguageLevel 3;
+#include "chatbotConfig";
 
-//Loading values from the trigger.
-EventData ed         = getEventData();
-String chatSessionId = ed.getInputValue("chatSession.id");
-String status        = ed.getInputValue("chatSession.status");
+Bool countCustMsg(String chatSessionId)
+{
+  SearchEngine countMsg;
+  countMsg.addField("chat_message.id");
+  countMsg.addCriteria("chat_message.session_id", "Equals", chatSessionId);
+  countMsg.addCriteria("chat_message.type", "Equals", "2");
+  
+  if(countMsg.countRows() >= minCustMsg)
+  {
+    return True;
+  }
+  else
+  {
+    return False;
+  }  
+}
 
-//Status 9 = chat session closed.
-if(status == "9"){
-  SearchEngine getTopicId; //Used to get the topicID of the chat_session.
-  getTopicId.addFields("chat_session","topic_id,customer_id");
-  getTopicId.addCriteria("chat_session.id", "Equals", chatSessionId);
-  getTopicId.setLimit(1);
-  getTopicId.execute();
-  String topicId = getTopicId.getField("chat_session.topic_id");
-  String customer_id = getTopicId.getField("chat_session.customer_id");
+String populateTranscript(String chatSessionId)
+{
+  String Null;
+  Map m;
+  m.insert(Null, "Customer");
+  m.insert(botName, botName);  
+  
+  SearchEngine getTranscript;
+  getTranscript.addFields("chat_message","author,session_id,message"); // To get author, session_id and messages.
+  getTranscript.addCriteria("chat_message.session_id", "Equals", chatSessionId);
+  getTranscript.addCriteria("chat_message.special_type", "OperatorNotEquals", "11");
+  String chatMSG; // Will keep all of the messages in this string.
 
-  //Should only save as a request for specific chat topics, and if the end customer is unidentified.
-  if(topicId == "2" || topicId == "3" && customer_id == "-1"){
-		Integer amountOfMsg = 5;
-    String Null;
-    Map m;
-    m.insert(Null, "Customer");
-    m.insert("Digital assistent", "Digital assistent");
+  for (getTranscript.execute(); !getTranscript.eof(); getTranscript.next())
+  {
+    chatMSG += "<b>"+m.get(getTranscript.getField("chat_message.author"))+"</b>"+": </br> "+getTranscript.getField("chat_message.message")+"</br> </br>";
+  }
 
-    //Populates the transcript that should be visible in the ticket.
-    String populateTranscript(){
-      SearchEngine getTranscript;
-      getTranscript.addFields("chat_message","author,session_id,message"); // To get author, session_id and messages.
-      getTranscript.addCriteria("chat_message.session_id", "Equals", chatSessionId);
-      getTranscript.addCriteria("chat_message.special_type", "OperatorNotEquals", "11");
-      String chatMSG; // Will keep all of the messages in this string.
+  return chatMSG;
+}
 
-      for (getTranscript.execute(); !getTranscript.eof(); getTranscript.next()){
-        chatMSG += "<b>"+m.get(getTranscript.getField("chat_message.author"))+"</b>"+": </br> "+getTranscript.getField("chat_message.message")+"</br> </br>";
-      }
-      return chatMSG;
-    }
+Void createTicket(String chatSessionId)
+{
+  Ticket newTicket;
+  newTicket.setValue("title", botRequestTitle);
+  newTicket.setValue("status","2"); //Registered as closed request.
+  newTicket.setValue("category", categoryId.toString());
+  newTicket.setValue("custId", "1");
+  newTicket.setValue("priority", "1");
+  newTicket.setValue("origin", "11");
+  Integer ticketId = newTicket.save();
 
-    //Creates the tickets, and populates the message using populateTranscript().
-    Void createTicket(){
-    Ticket newTicket;
-    newTicket.setValue("title", "Botchat session");
-    newTicket.setValue("status","2"); //Registered as closed request.
-    newTicket.setValue("category", "4");
-    newTicket.setValue("custId", "1");
-    newTicket.setValue("priority", "1");
-    newTicket.setValue("origin", "11");
-    Integer ticketId = newTicket.save();
+  NSChatSummaryItem chatSum;
+  chatSum.SetChatSessionId(chatSessionId.toInteger());
+  
+  Message m;
+  m.setValue("author", "(System)");
+  m.setValue("createdBy", "1"); //message created by System
+  m.setValue("bodyHtml", populateTranscript(chatSessionId) +"</br> </br> Chat started: " +chatSum.GetWhenRequested().toString() + "</br> Chat ended: " + chatSum.GetWhenEnded().toString());
+  m.setValue("slevel", "1");//internal message
+  m.setValue("ticketId", ticketId.toString());
+  m.save();
+}  
 
-    Message m;
-    m.setValue("author", "(System)");
-    m.setValue("createdBy", "1"); //message created by System
-    m.setValue("bodyHtml", populateTranscript() +"</br> </br> Chat ended");
-    m.setValue("slevel", "1");//internal message
-    m.setValue("ticketId", ticketId.toString());
-    m.save();
-    }
-
-    createTicket();
+Void archiveRequest(String topicId, String customer_id, String chatSessionId)
+{
+  if(topicId == chatTopicId && customer_id == "-1" && countCustMsg(chatSessionId) == True)
+  {
+    createTicket(chatSessionId);		
   }
 }
