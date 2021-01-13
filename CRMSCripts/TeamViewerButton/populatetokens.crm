@@ -1,0 +1,112 @@
+#setLanguageLevel 3;
+
+String auth_code = "x"; //Get this from login.teamviewer.com/oauth2/authorize?response_type=code&client_id=x&  
+String clientId     = "x";
+String clientSecret = "x";
+String access_token;
+String refresh_token;
+
+JSONBuilder refreshToken;
+refreshToken.pushObject("");
+refreshToken.addString("grant_type", "authorization_code");
+refreshToken.addString("code", auth_code);
+refreshToken.addString("client_id", clientId);       
+refreshToken.addString("client_secret", clientSecret);
+refreshToken.popLevel();  
+
+HTTP TokensPost;
+TokensPost.addHeader("content-type", "application/json");
+TokensPost.setOption("parameters" , "?" + refreshToken.getString());
+String TokensPost_return = String(TokensPost.post("https://webapi.teamviewer.com/api/v1/oauth2/token"));
+XMLNode x3   = parseJSON(TokensPost_return);
+access_token  = x3.getValueFromPath("access_token");  
+refresh_token = x3.getValueFromPath("refresh_token");
+
+Void addToBinaryObject(String token, String tokenType)
+{   
+  DateTime dt;
+
+  //Gets next available ID in the BinaryObject table.
+  SearchEngine getBinaryObjId;
+  getBinaryObjId.addField("BinaryObject.BinaryObject_id");
+  getBinaryObjId.addOrder("BinaryObject.BinaryObject_id", False);
+  getBinaryObjId.setLimit(1);
+  getBinaryObjId.execute();
+
+  Integer nextRow = getBinaryObjId.getField("BinaryObject.BinaryObject_id").toInteger() + 1;  
+  Integer newSeq = nextRow + 1;   
+
+  //Adds the row to BinaryObject;
+  SearchEngine se;
+  se.addData("BinaryObject.BinaryObject_id", nextRow.toString());
+  se.addData("BinaryObject.conceptualType", "yourVal" + tokenType);
+  se.addData("BinaryObject.mimeType", "text/xml");
+  se.addData("BinaryObject.description", "TeamViewer Integration");
+  se.addData("BinaryObject.updatedCount", "1");
+  se.addData("BinaryObject.originalSize", "1");
+  se.addData("BinaryObject.blobSize", "1");
+  se.addData("BinaryObject.isZipped", "0");
+  se.addData("BinaryObject.isEncrypted", "1");
+  se.addData("BinaryObject.updated", dt.getDate().toString());
+  se.addData("BinaryObject.registered", dt.getDate().toString());
+  se.addData("BinaryObject.registered_associate_id", "x");
+  se.addData("BinaryObject.updated_associate_id", "x");
+  se.insert();
+
+  Byte[] encryptedVal = simpleTwoWay(token.toByteArray());    
+  NSStream stream;
+  NSBLOBAgent bAgent;
+  stream.SetStream(encryptedVal);
+  bAgent.SetBlobStream(nextRow, stream);    
+
+  //Updates SearchEngine.
+  SearchEngine updateSeq;
+  updateSeq.addCriteria("sequence.TableName", "equals","BINARYOBJECT");
+  updateSeq.addData("sequence.next_id", newSeq.toString());
+  updateSeq.update();   
+}
+
+Void updateTokens()
+{
+  SearchEngine findRow;
+  findRow.addField("BinaryObject.BinaryObject_id");
+  findRow.addCriteria("BinaryObject.description", "Equals", "TeamViewer Integration");
+
+	if(findRow.countRows() == 0)
+	{
+    addToBinaryObject(access_token, "access_token");
+    addToBinaryObject(refresh_token, "refresh_token");
+	} 
+	else if(findRow.countRows() == 2)
+	{
+    SearchEngine updateAccess;
+    updateAccess.addField("BinaryObject.BinaryObject_id");
+    updateAccess.addCriteria("BinaryObject.conceptualType", "Equals", "souab.tv.access_token");
+    updateAccess.execute();
+    Integer accessId = updateAccess.getField("BinaryObject.BinaryObject_id").toInteger();
+
+    SearchEngine updateRefresh;
+    updateRefresh.addField("BinaryObject.BinaryObject_id");
+    updateRefresh.addCriteria("BinaryObject.conceptualType", "Equals", "souab.tv.refresh_token");
+    updateRefresh.execute();
+    Integer refreshId = updateRefresh.getField("BinaryObject.BinaryObject_id").toInteger();
+
+    Byte[] accessToken = simpleTwoWay(access_token.toByteArray());    
+    NSStream stream1;
+    NSBLOBAgent bAgent1;
+    stream1.SetStream(accessToken);
+    bAgent1.SetBlobStream(accessId, stream1);    
+
+    Byte[] refreshToken = simpleTwoWay(refresh_token.toByteArray());    
+    NSStream stream2;
+    NSBLOBAgent bAgent2;
+    stream2.SetStream(refreshToken);
+    bAgent2.SetBlobStream(refreshId, stream2);   
+	}
+	else
+	{
+    print("Something went wrong. Verify tokens in DB.");
+	}
+}
+
+updateTokens();
