@@ -1,0 +1,59 @@
+Trigger: New chat session:
+
+#setLanguageLevel 3;
+#include "greetingMessage";
+#include "chatbotConfig";
+
+EventData ed = getEventData();
+String chatSessionId = ed.getInputValue("chatSession.id");
+String customerFirstName = ed.getInputValue("chatSession.customerAlias").before(" ");
+String topicId = ed.getInputValue("chatSession.topicId");
+
+if(topicId == chatTopicId)
+{
+  sendFirstMessage(chatSessionId, customerFirstName);
+}
+
+
+Trigger: After saving chat message:
+
+#setLanguageLevel 3;
+#include "conversationHandler";
+#include "chatbotConfig";
+
+EventData ed = getEventData();
+String chatSessionId  = ed.getInputValue("chatMessage.sessionId");
+String customerText   = ed.getInputValue("chatMessage.message");
+String specialType    = ed.getInputValue("chatMessage.specialType");
+String userId         = ed.getInputValue("chatSession.userId");
+String chatType       = ed.getInputValue("chatMessage.type");
+String topicId        = ed.getInputValue("chatSession.topicId");
+String author         = ed.getInputValue("chatMessage.author");
+
+if (topicId == chatTopicId)
+{
+	handleConversation(chatSessionId, customerText, specialType, userId, chatType, topicId, author);
+}
+
+Trigger: Chat session changed status:
+
+#setLanguageLevel 3;
+#include"botArchive";
+
+EventData ed         = getEventData();
+String chatSessionId = ed.getInputValue("chatSession.id");
+String status        = ed.getInputValue("chatSession.status");
+
+if(status == "9")
+{
+  SearchEngine getTopicId; //Used to get the topicID of the chat_session.
+  getTopicId.addFields("chat_session","topic_id,customer_id");
+  getTopicId.addCriteria("chat_session.id", "Equals", chatSessionId);
+  getTopicId.setLimit(1);
+  getTopicId.execute();
+  String topicId = getTopicId.getField("chat_session.topic_id");
+  String customer_id = getTopicId.getField("chat_session.customer_id");
+
+  archiveRequest(topicId, customer_id, chatSessionId);
+
+}
